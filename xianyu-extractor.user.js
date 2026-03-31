@@ -3,7 +3,8 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.2
 // @description  Extrai produtos da busca e páginas individuais do Goofish formatado para análise com LLM
-// @author       https://github.com/pemaismais
+// @author       pemaismais
+// @homepageURL  https://github.com/pemaismais/xianyu-extractor-for-llm
 // @match        https://www.goofish.com/search*
 // @match        https://goofish.com/search*
 // @match        https://www.goofish.com/item*
