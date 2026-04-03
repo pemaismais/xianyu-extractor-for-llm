@@ -11,9 +11,17 @@ export function createDragContainer() {
     const savedPos = getStorage('btnPos', null);
 
     const el = document.createElement('div');
+    const baseStyle = `
+        position: fixed; z-index: 99999; cursor: grab; user-select: none;
+        transition: left 0.15s ease, top 0.15s ease;
+        background: #18181b; border: 1px solid #27272a;
+        border-radius: 16px; padding: 16px; min-width: 320px;
+        display: flex; flex-direction: column; gap: 16px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.5); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    `;
     el.style.cssText = savedPos
-        ? `position: fixed; top: ${savedPos.top}px; left: ${savedPos.left}px; z-index: 99999; cursor: grab; user-select: none; transition: left 0.15s ease, top 0.15s ease;`
-        : `position: fixed; top: 80px; right: 20px; z-index: 99999; cursor: grab; user-select: none; transition: left 0.15s ease, top 0.15s ease;`;
+        ? `${baseStyle} top: ${savedPos.top}px; left: ${savedPos.left}px;`
+        : `${baseStyle} top: 80px; right: 20px;`;
 
     let isDragging = false, hasDragged = false;
     let startX = 0, startY = 0, startLeft = 0, startTop = 0;

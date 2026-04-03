@@ -6,12 +6,19 @@ import { formatSingleItemForLLM } from '../core/format.js';
 
 export function initItemPage() {
     const { el: container, onContainerClick } = createDragContainer();
-    const { btn, icon, btnText, sizeToggle }  = createExtractButton('Copiar Produto');
+    const { btn, icon, btnText, sizeToggle } = createExtractButton('Copiar Produto', container);
 
     const btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display: flex; align-items: stretch;';
+    btnRow.style.cssText = 'display: flex; justify-content: space-between; align-items: stretch; gap: 12px;';
     btnRow.appendChild(btn);
-    btnRow.appendChild(sizeToggle);
+
+    const rightPill = document.createElement('div');
+    rightPill.style.cssText = 'display: flex; align-items: stretch; background: #09090b; border: 1px solid #27272a; border-radius: 9999px; overflow: hidden; margin: 2px;';
+    
+    sizeToggle.style.borderLeft = 'none'; // remove border as it is the only element in the pill
+    rightPill.appendChild(sizeToggle);
+    
+    btnRow.appendChild(rightPill);
     container.appendChild(btnRow);
     document.body.appendChild(container);
 

@@ -72,44 +72,43 @@
         };
     }
 
-    const MARGIN         = 12;
+    const MARGIN = 12;
     const SNAP_THRESHOLD = 60;
 
     const SIZES = {
-        small:  { padding: '6px 10px',  fontSize: '11px', iconSize: '14px', gap: '5px',  minWidth: '120px' },
-        medium: { padding: '10px 16px', fontSize: '13px', iconSize: '18px', gap: '8px',  minWidth: '170px' },
-        large:  { padding: '14px 22px', fontSize: '15px', iconSize: '22px', gap: '10px', minWidth: '200px' },
+        medium: { scale: '1' },
+        large:  { scale: '1.25' },
     };
-    const SIZE_ORDER = ['small', 'medium', 'large'];
+    const SIZE_ORDER = ['medium', 'large'];
 
     const ICON = {
-        copy:   'https://api.iconify.design/mdi:content-copy.svg?color=%23e0e0e0',
-        check:  'https://api.iconify.design/mdi:check.svg?color=%2322c55e',
-        alert:  'https://api.iconify.design/mdi:alert-circle.svg?color=%23ef4444',
-        resize: 'https://api.iconify.design/mdi:resize.svg?color=%23e0e0e0',
-        filter: 'https://api.iconify.design/mdi:filter-outline.svg?color=%23e0e0e0',
+        copy: 'https://api.iconify.design/mdi:content-copy.svg?color=%2318181b', // Preto para círculo branco
+        check: 'https://api.iconify.design/mdi:check.svg?color=%2322c55e',
+        alert: 'https://api.iconify.design/mdi:alert-circle.svg?color=%23ef4444',
+        resize: 'https://api.iconify.design/heroicons:arrows-pointing-out.svg?color=%23a1a1aa', // Cinza claro
+        filter: 'https://api.iconify.design/heroicons-outline:filter.svg?color=%23facc15', // Amarelo
     };
 
     const SELECTORS = {
         listContainer: '.feeds-list-container--UkIMBPNk',
         // item page
-        sellerName:    '.item-user-info-nick--rtpDhkmQ',
-        sellerInfo:    '.item-user-info-intro--ZN1A0_8Y',
-        sellerLabel:   '.item-user-info-label--NLTMHARN',
-        price:         '.price--OEWLbcxC',
+        sellerName: '.item-user-info-nick--rtpDhkmQ',
+        sellerInfo: '.item-user-info-intro--ZN1A0_8Y',
+        sellerLabel: '.item-user-info-label--NLTMHARN',
+        price: '.price--OEWLbcxC',
         mainContainer: '.main--Nu33bWl6',
-        desc:          '.desc--GaIUKUQY',
-        labels:        '.labels--ndhPFgp8',
-        labelItem:     '.item--qI9ENIfp',
-        labelKey:      '.label--ejJeaTRV',
-        labelValue:    '.value--EyQBSInp',
-        want:          '.want--ecByv3Sr',
+        desc: '.desc--GaIUKUQY',
+        labels: '.labels--ndhPFgp8',
+        labelItem: '.item--qI9ENIfp',
+        labelKey: '.label--ejJeaTRV',
+        labelValue: '.value--EyQBSInp',
+        want: '.want--ecByv3Sr',
         // search cards
-        cardTitle:     '.main-title--sMrtWSJa',
-        cardRow2:      '.row2-wrap-cpv--_dKW4c6D',
-        cardPrice:     '.number--NKh1vXWM',
-        cardPromo:     '.price-desc--hxYyq3i3',
-        cardSeller:    '.seller-text--Rr2Y3EbB',
+        cardTitle: '.main-title--sMrtWSJa',
+        cardRow2: '.row2-wrap-cpv--_dKW4c6D',
+        cardPrice: '.number--NKh1vXWM',
+        cardPromo: '.price-desc--hxYyq3i3',
+        cardSeller: '.seller-text--Rr2Y3EbB',
         cardSellerTag: '.credit-container--w3dcSvoi span',
     };
 
@@ -160,11 +159,11 @@
     }
 
     /** @param {string} key @param {*} fallback */
-    const getStorage$1 = (key, fallback = null) =>
+    const getStorage = (key, fallback = null) =>
         typeof GM_getValue !== 'undefined' ? GM_getValue(key, fallback) : fallback;
 
     /** @param {string} key @param {*} value */
-    const setStorage$1 = (key, value) => {
+    const setStorage = (key, value) => {
         if (typeof GM_setValue !== 'undefined') GM_setValue(key, value);
     };
 
@@ -175,12 +174,20 @@
      * @returns {{ el: HTMLDivElement, onContainerClick: (cb: (e: MouseEvent) => void) => void }}
      */
     function createDragContainer() {
-        const savedPos = getStorage$1('btnPos', null);
+        const savedPos = getStorage('btnPos', null);
 
         const el = document.createElement('div');
+        const baseStyle = `
+        position: fixed; z-index: 99999; cursor: grab; user-select: none;
+        transition: left 0.15s ease, top 0.15s ease;
+        background: #18181b; border: 1px solid #27272a;
+        border-radius: 16px; padding: 16px; min-width: 320px;
+        display: flex; flex-direction: column; gap: 16px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.5); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    `;
         el.style.cssText = savedPos
-            ? `position: fixed; top: ${savedPos.top}px; left: ${savedPos.left}px; z-index: 99999; cursor: grab; user-select: none; transition: left 0.15s ease, top 0.15s ease;`
-            : `position: fixed; top: 80px; right: 20px; z-index: 99999; cursor: grab; user-select: none; transition: left 0.15s ease, top 0.15s ease;`;
+            ? `${baseStyle} top: ${savedPos.top}px; left: ${savedPos.left}px;`
+            : `${baseStyle} top: 80px; right: 20px;`;
 
         let isDragging = false, hasDragged = false;
         let startX = 0, startY = 0, startLeft = 0, startTop = 0;
@@ -217,7 +224,7 @@
             const snapped = snapPosition(rect.left, rect.top, rect.width, rect.height);
             el.style.left = snapped.left + 'px';
             el.style.top  = snapped.top  + 'px';
-            setStorage$1('btnPos', snapped);
+            setStorage('btnPos', snapped);
             if (!hasDragged) clickCallbacks.forEach(cb => cb(e));
         });
 
@@ -247,63 +254,64 @@
      *   sizeToggle: HTMLButtonElement,
      * }}
      */
-    function createExtractButton(label) {
+    function createExtractButton(label, container) {
         let currentSizeIndex = (() => {
-            const idx = SIZE_ORDER.indexOf(getStorage$1('btnSize', null));
-            return idx !== -1 ? idx : 1;
+            const idx = SIZE_ORDER.indexOf(getStorage('btnSize', null));
+            return idx !== -1 ? idx : 0;
         })();
 
         // ── Main button ──
         const btn = document.createElement('button');
         btn.style.cssText = `
-        display: flex; align-items: center; gap: 8px;
-        padding: 10px 16px;
-        background: #1a1a1a; color: #e0e0e0;
-        border: 1px solid #333; border-right: none;
-        border-radius: 6px 0 0 6px;
-        cursor: pointer; font-size: 13px; font-weight: 500;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        display: flex; align-items: center; justify-content: center;
+        background: #09090b; color: #f4f4f5;
+        border: 1px solid #27272a;
+        border-radius: 9999px;
+        cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         transition: background 0.2s ease, border-color 0.2s ease;
+        padding: 10px 20px; font-size: 15px; font-weight: bold; gap: 10px; min-width: 180px;
     `;
+        const iconWrap = document.createElement('div');
+        iconWrap.style.cssText = 'display: flex; align-items: center; justify-content: center; background: white; border-radius: 50%; width: 28px; height: 28px;';
         const icon = document.createElement('img');
         icon.src = ICON.copy;
-        icon.style.cssText = 'width: 18px; height: 18px;';
+        icon.style.cssText = 'width: 16px; height: 16px;';
+        iconWrap.appendChild(icon);
+
         const btnText = document.createElement('span');
         btnText.textContent = label;
-        btn.appendChild(icon);
+        btn.appendChild(iconWrap);
         btn.appendChild(btnText);
-        btn.addEventListener('mouseenter', () => { btn.style.background = '#2a2a2a'; btn.style.borderColor = '#444'; });
-        btn.addEventListener('mouseleave', () => { btn.style.background = '#1a1a1a'; btn.style.borderColor = '#333'; });
+        btn.addEventListener('mouseenter', () => { btn.style.background = '#18181b'; btn.style.borderColor = '#3f3f46'; });
+        btn.addEventListener('mouseleave', () => { btn.style.background = '#09090b'; btn.style.borderColor = '#27272a'; });
 
         // ── Size toggle ──
         const sizeToggle = document.createElement('button');
         sizeToggle.title = 'Mudar tamanho';
         sizeToggle.style.cssText = `
         display: flex; align-items: center; justify-content: center;
-        padding: 0 10px;
-        background: #1a1a1a;
-        border: 1px solid #333;
-        border-radius: 0 6px 6px 0;
-        cursor: pointer; opacity: 0.9;
+        padding: 0 15px; height: 100%;
+        background: transparent;
+        border: none;
+        border-left: 1px solid #27272a;
+        cursor: pointer; opacity: 0.8;
         transition: opacity 0.2s, background 0.2s, transform 0.15s ease;
     `;
         const sizeIconEl = document.createElement('img');
         sizeIconEl.src = ICON.resize;
-        sizeIconEl.style.cssText = 'width: 14px; height: 14px; pointer-events: none;';
+        sizeIconEl.style.cssText = 'width: 20px; height: 20px; pointer-events: none;';
         sizeToggle.appendChild(sizeIconEl);
-        sizeToggle.addEventListener('mouseenter', () => { sizeToggle.style.opacity = '1';   sizeToggle.style.background = '#2a2a2a'; });
-        sizeToggle.addEventListener('mouseleave', () => { sizeToggle.style.opacity = '0.9'; sizeToggle.style.background = '#1a1a1a'; });
+        sizeToggle.addEventListener('mouseenter', () => { sizeToggle.style.opacity = '1'; });
+        sizeToggle.addEventListener('mouseleave', () => { sizeToggle.style.opacity = '0.8'; });
         // Prevent drag from starting when clicking the toggle
         sizeToggle.addEventListener('mousedown', e => e.stopPropagation());
 
         function applySize(key) {
             const s = SIZES[key];
-            btn.style.padding  = s.padding;
-            btn.style.fontSize = s.fontSize;
-            btn.style.gap      = s.gap;
-            btn.style.minWidth = s.minWidth;
-            icon.style.width   = s.iconSize;
-            icon.style.height  = s.iconSize;
+            if (container) {
+                container.style.transform = `scale(${s.scale})`;
+                container.style.transformOrigin = 'top right';
+            }
         }
         applySize(SIZE_ORDER[currentSizeIndex]);
 
@@ -315,14 +323,14 @@
             currentSizeIndex = (currentSizeIndex + 1) % SIZE_ORDER.length;
             const newSize = SIZE_ORDER[currentSizeIndex];
             sizeToggle.style.transform = 'scale(0.9)';
-            btn.style.transition  = 'all 0.3s ease';
+            btn.style.transition = 'all 0.3s ease';
             icon.style.transition = 'all 0.3s ease';
             applySize(newSize);
-            setStorage$1('btnSize', newSize);
+            setStorage('btnSize', newSize);
             setTimeout(() => { sizeToggle.style.transform = 'scale(1)'; }, 150);
             setTimeout(() => {
                 sizeChanging = false;
-                btn.style.transition  = 'background 0.2s ease, border-color 0.2s ease';
+                btn.style.transition = 'background 0.2s ease, border-color 0.2s ease';
                 icon.style.transition = '';
             }, 400);
         });
@@ -330,115 +338,133 @@
         return { btn, icon, btnText, sizeToggle };
     }
 
-    /**
-     * Creates the filter panel DOM. Event wiring happens in pages/search.js.
-     *
-     * @returns {{
-     *   panel: HTMLDivElement,
-     *   minApprovalInput: HTMLInputElement,
-     *   minReviewsInput: HTMLInputElement,
-     *   applyBtn: HTMLButtonElement,
-     *   clearBtn: HTMLButtonElement,
-     *   status: HTMLDivElement,
-     * }}
-     */
     function createFilterPanel() {
-        const panel = document.createElement('div');
-        panel.style.cssText = `
-        position: absolute;
-        top: calc(100% + 6px);
-        right: 0;
-        background: #1a1a1a;
-        border: 1px solid #333;
-        border-radius: 6px;
-        padding: 12px 14px;
-        min-width: 260px;
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = `
         display: none;
         flex-direction: column;
-        gap: 10px;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.5);
     `;
-        // Prevent drag from starting inside the panel
-        panel.addEventListener('mousedown', e => e.stopPropagation());
+        wrapper.addEventListener('mousedown', e => e.stopPropagation());
+
+        const separator1 = document.createElement('div');
+        separator1.style.cssText = 'height: 1px; background: #27272a; width: 100%; margin-bottom: 16px;';
+        wrapper.appendChild(separator1);
+
+        const inputsRow = document.createElement('div');
+        inputsRow.style.cssText = 'display: flex; gap: 16px; margin-bottom: 16px;';
 
         const INPUT_STYLE = `
-        background: #2a2a2a; color: #e0e0e0;
-        border: 1px solid #444; border-radius: 4px;
-        padding: 4px 8px; font-size: 12px;
-        width: 68px; text-align: right; outline: none;
-        font-family: inherit;
+        background: #09090b; color: #f4f4f5;
+        border: 1px solid #27272a; border-radius: 8px;
+        padding: 12px; font-size: 14px;
+        width: 100%; outline: none; font-weight: 500; box-sizing: border-box;
+        font-family: inherit; transition: border-color 0.2s;
+    `;
+        const LABEL_STYLE = `
+        display: block; font-size: 13px; color: #a1a1aa; font-weight: 500; margin-bottom: 8px;
     `;
 
-        function makeRow(labelText, inputEl, suffix = '') {
-            const row = document.createElement('div');
-            row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 8px;';
-            const label = document.createElement('span');
-            label.style.cssText = 'font-size: 12px; color: #aaa; white-space: nowrap;';
+        function makeCol(labelText, inputEl, suffix = '') {
+            const col = document.createElement('div');
+            col.style.cssText = 'flex: 1; display: flex; flex-direction: column;';
+            const label = document.createElement('label');
+            label.style.cssText = LABEL_STYLE;
             label.textContent = labelText;
-            const wrap = document.createElement('div');
-            wrap.style.cssText = 'display: flex; align-items: center; gap: 4px;';
-            wrap.appendChild(inputEl);
+            col.appendChild(label);
+
             if (suffix) {
+                const wrap = document.createElement('div');
+                wrap.style.cssText = 'position: relative; width: 100%;';
+                inputEl.style.paddingRight = '28px';
+                wrap.appendChild(inputEl);
                 const s = document.createElement('span');
-                s.style.cssText = 'font-size: 12px; color: #666;';
+                s.style.cssText = 'position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #52525b; font-size: 14px; font-weight: 500; pointer-events: none;';
                 s.textContent = suffix;
                 wrap.appendChild(s);
+                col.appendChild(wrap);
+            } else {
+                col.appendChild(inputEl);
             }
-            row.appendChild(label);
-            row.appendChild(wrap);
-            return row;
+            return col;
         }
 
+        const styleOverrides = document.createElement('style');
+        styleOverrides.textContent = `
+        .xyu-no-spin::-webkit-outer-spin-button,
+        .xyu-no-spin::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .xyu-no-spin[type="number"] {
+            -moz-appearance: textfield;
+        }
+    `;
+        wrapper.appendChild(styleOverrides);
+
         const minApprovalInput = document.createElement('input');
-        minApprovalInput.type = 'number';
-        minApprovalInput.min = '0';
-        minApprovalInput.max = '100';
-        minApprovalInput.placeholder = '—';
-        minApprovalInput.style.cssText = INPUT_STYLE;
+        minApprovalInput.className = 'xyu-no-spin';
+        minApprovalInput.type = 'number'; minApprovalInput.min = '0'; minApprovalInput.max = '100';
+        minApprovalInput.placeholder = '—'; minApprovalInput.style.cssText = INPUT_STYLE;
+        minApprovalInput.addEventListener('focus', () => minApprovalInput.style.borderColor = '#52525b');
+        minApprovalInput.addEventListener('blur', () => minApprovalInput.style.borderColor = '#27272a');
 
         const minReviewsInput = document.createElement('input');
-        minReviewsInput.type = 'number';
-        minReviewsInput.min = '0';
-        minReviewsInput.placeholder = '—';
-        minReviewsInput.style.cssText = INPUT_STYLE;
+        minReviewsInput.className = 'xyu-no-spin';
+        minReviewsInput.type = 'number'; minReviewsInput.min = '0';
+        minReviewsInput.placeholder = '—'; minReviewsInput.style.cssText = INPUT_STYLE;
+        minReviewsInput.addEventListener('focus', () => minReviewsInput.style.borderColor = '#52525b');
+        minReviewsInput.addEventListener('blur', () => minReviewsInput.style.borderColor = '#27272a');
+
+        inputsRow.appendChild(makeCol('Aprovação mínima', minApprovalInput, '%'));
+        inputsRow.appendChild(makeCol('Avaliações mínimas', minReviewsInput));
+        wrapper.appendChild(inputsRow);
+
+        const separator2 = document.createElement('div');
+        separator2.style.cssText = 'height: 1px; background: #27272a; width: calc(100% + 32px); margin-left: -16px; margin-bottom: 16px;';
+        wrapper.appendChild(separator2);
 
         const actionRow = document.createElement('div');
-        actionRow.style.cssText = 'display: flex; gap: 6px;';
+        actionRow.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 16px;';
 
-        const applyBtn = document.createElement('button');
-        applyBtn.textContent = 'Aplicar filtro';
-        applyBtn.style.cssText = `
-        flex: 1; padding: 6px; background: #2563eb; color: #fff;
-        border: none; border-radius: 4px; font-size: 12px; font-weight: 500;
-        cursor: pointer; font-family: inherit; transition: background 0.2s;
-    `;
-        applyBtn.addEventListener('mouseenter', () => applyBtn.style.background = '#1d4ed8');
-        applyBtn.addEventListener('mouseleave', () => applyBtn.style.background = '#2563eb');
-        applyBtn.addEventListener('click', e => e.stopPropagation());
+        const statusWrap = document.createElement('div');
+        statusWrap.style.cssText = 'display: flex; align-items: center; gap: 8px; flex: 1;';
+        const statusDot = document.createElement('div');
+        statusDot.style.cssText = 'width: 6px; height: 6px; border-radius: 50%; background: #3f3f46; transition: background 0.2s, box-shadow 0.2s;';
+        const status = document.createElement('div');
+        status.style.cssText = 'font-size: 13px; color: #a1a1aa; font-weight: 500;';
+        statusWrap.appendChild(statusDot);
+        statusWrap.appendChild(status);
+
+        const rightActions = document.createElement('div');
+        rightActions.style.cssText = 'display: flex; align-items: center; gap: 16px;';
 
         const clearBtn = document.createElement('button');
         clearBtn.textContent = 'Limpar';
         clearBtn.style.cssText = `
-        flex: 1; padding: 6px; background: #2a2a2a; color: #aaa;
-        border: 1px solid #444; border-radius: 4px; font-size: 12px;
-        cursor: pointer; font-family: inherit; transition: background 0.2s;
+        background: transparent; color: #a1a1aa; border: none; font-size: 14px; font-weight: 600; cursor: pointer; padding: 0; transition: color 0.2s;
     `;
-        clearBtn.addEventListener('mouseenter', () => clearBtn.style.background = '#333');
-        clearBtn.addEventListener('mouseleave', () => clearBtn.style.background = '#2a2a2a');
-        clearBtn.addEventListener('click', e => e.stopPropagation());
+        clearBtn.addEventListener('mouseenter', () => clearBtn.style.color = '#f4f4f5');
+        clearBtn.addEventListener('mouseleave', () => clearBtn.style.color = '#a1a1aa');
 
-        const status = document.createElement('div');
-        status.style.cssText = 'font-size: 11px; color: #555; text-align: center;';
+        const applyBtn = document.createElement('button');
+        applyBtn.textContent = 'Aplicar filtro';
+        applyBtn.style.cssText = `
+        background: #facc15; color: #18181b; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; padding: 10px 16px; transition: background 0.2s;
+    `;
+        applyBtn.addEventListener('mouseenter', () => applyBtn.style.background = '#eab308');
+        applyBtn.addEventListener('mouseleave', () => applyBtn.style.background = '#facc15');
 
-        actionRow.appendChild(applyBtn);
-        actionRow.appendChild(clearBtn);
-        panel.appendChild(makeRow('Aprovação mínima',  minApprovalInput, '%'));
-        panel.appendChild(makeRow('Avaliações mínimas', minReviewsInput));
-        panel.appendChild(actionRow);
-        panel.appendChild(status);
+        minApprovalInput.addEventListener('keydown', e => { if (e.key === 'Enter') applyBtn.click(); });
+        minReviewsInput.addEventListener('keydown', e => { if (e.key === 'Enter') applyBtn.click(); });
 
-        return { panel, minApprovalInput, minReviewsInput, applyBtn, clearBtn, status };
+        rightActions.appendChild(clearBtn);
+        rightActions.appendChild(applyBtn);
+        actionRow.appendChild(statusWrap);
+        actionRow.appendChild(rightActions);
+        wrapper.appendChild(actionRow);
+
+        return { panel: wrapper, minApprovalInput, minReviewsInput, applyBtn, clearBtn, status, statusDot };
     }
 
     /** Extracts all relevant data from the item detail page. */
@@ -623,47 +649,51 @@
     }
 
     function initSearchPage() {
-        let filterActive    = false;
+        let filterActive = false;
         let filterPanelOpen = false;
 
         // ── Structure ──
         const { el: container, onContainerClick } = createDragContainer();
-        const { btn, icon, btnText, sizeToggle }  = createExtractButton('Extrair Produtos');
+        const { btn, icon, btnText, sizeToggle } = createExtractButton('Extrair Produtos', container);
 
         const btnRow = document.createElement('div');
-        btnRow.style.cssText = 'display: flex; align-items: stretch;';
+        btnRow.style.cssText = 'display: flex; justify-content: space-between; align-items: stretch; gap: 12px;';
+
+        const rightPill = document.createElement('div');
+        rightPill.style.cssText = 'display: flex; align-items: stretch; background: #09090b; border: 1px solid #27272a; border-radius: 9999px; overflow: hidden; margin: 2px;';
 
         // ── Filter button ──
         const filterBtn = document.createElement('button');
         filterBtn.title = 'Filtrar por reputação';
         filterBtn.style.cssText = `
         display: flex; align-items: center; justify-content: center;
-        padding: 0 10px;
-        background: #1a1a1a;
-        border: 1px solid #333; border-right: none;
-        cursor: pointer; opacity: 0.9;
+        padding: 0 15px; height: 100%;
+        background: transparent;
+        border: none;
+        cursor: pointer; opacity: 0.8;
         transition: opacity 0.2s, background 0.2s;
     `;
         const filterIconEl = document.createElement('img');
         filterIconEl.src = ICON.filter;
-        filterIconEl.style.cssText = 'width: 14px; height: 14px; pointer-events: none;';
+        filterIconEl.style.cssText = 'width: 20px; height: 20px; pointer-events: none; filter: grayscale(1) brightness(2); transition: all 0.2s;';
         filterBtn.appendChild(filterIconEl);
-        filterBtn.addEventListener('mouseenter', () => { filterBtn.style.opacity = '1';   if (!filterActive) filterBtn.style.background = '#2a2a2a'; });
-        filterBtn.addEventListener('mouseleave', () => { filterBtn.style.opacity = '0.9'; if (!filterActive) filterBtn.style.background = '#1a1a1a'; });
-        filterBtn.addEventListener('mousedown',  e  => e.stopPropagation());
+        filterBtn.addEventListener('mouseenter', () => { filterBtn.style.opacity = '1'; });
+        filterBtn.addEventListener('mouseleave', () => { filterBtn.style.opacity = '0.8'; });
+        filterBtn.addEventListener('mousedown', e => e.stopPropagation());
 
-        const { panel: filterPanel, minApprovalInput, minReviewsInput, applyBtn, clearBtn, status: filterStatus } = createFilterPanel();
+        const { panel: filterPanel, minApprovalInput, minReviewsInput, applyBtn, clearBtn, status: filterStatus, statusDot } = createFilterPanel();
 
         // Restaura valores salvos anteriormente
-        const savedApproval = getStorage$1('filterMinApproval', '');
-        const savedReviews  = getStorage$1('filterMinReviews',  '');
+        const savedApproval = getStorage('filterMinApproval', '');
+        const savedReviews = getStorage('filterMinReviews', '');
         if (savedApproval !== '') minApprovalInput.value = savedApproval;
-        if (savedReviews  !== '') minReviewsInput.value  = savedReviews;
+        if (savedReviews !== '') minReviewsInput.value = savedReviews;
 
         // ── Assemble ──
+        rightPill.appendChild(filterBtn);
+        rightPill.appendChild(sizeToggle);
         btnRow.appendChild(btn);
-        btnRow.appendChild(filterBtn);
-        btnRow.appendChild(sizeToggle);
+        btnRow.appendChild(rightPill);
         container.appendChild(btnRow);
         container.appendChild(filterPanel);
         document.body.appendChild(container);
@@ -690,8 +720,8 @@
             }
             const lc = getListContainer();
             if (!lc) return;
-            const cards   = lc.querySelectorAll(':scope > a');
-            let   visible = 0;
+            const cards = lc.querySelectorAll(':scope > a');
+            let visible = 0;
             cards.forEach(c => { if (c.style.display !== 'none') visible++; });
             filterStatus.textContent = `${visible} de ${cards.length} visíveis`;
         }
@@ -699,7 +729,7 @@
         function getFilterValues() {
             return {
                 minA: minApprovalInput.value !== '' ? parseInt(minApprovalInput.value) : null,
-                minR: minReviewsInput.value  !== '' ? parseInt(minReviewsInput.value)  : null,
+                minR: minReviewsInput.value !== '' ? parseInt(minReviewsInput.value) : null,
             };
         }
 
@@ -707,10 +737,13 @@
             const { minA, minR } = getFilterValues();
             if (minA === null && minR === null) { doClearFilter(); return; }
             filterActive = true;
-            filterBtn.style.background = '#1e3a5f';
+            filterBtn.style.background = 'rgba(250, 204, 21, 0.1)';
+            filterIconEl.style.filter = 'none';
+            statusDot.style.background = '#facc15';
+            statusDot.style.boxShadow = '0 0 8px #facc15';
             filterBtn.title = 'Filtro ativo — clique para editar';
-            setStorage$1('filterMinApproval', minApprovalInput.value);
-            setStorage$1('filterMinReviews',  minReviewsInput.value);
+            setStorage('filterMinApproval', minApprovalInput.value);
+            setStorage('filterMinReviews', minReviewsInput.value);
             applyFilter(minA, minR);
             updateFilterStatus();
             updateProductCount();
@@ -718,12 +751,15 @@
 
         function doClearFilter() {
             filterActive = false;
-            filterBtn.style.background = '#1a1a1a';
+            filterBtn.style.background = 'transparent';
+            filterIconEl.style.filter = 'grayscale(1) brightness(2)';
+            statusDot.style.background = '#3f3f46';
+            statusDot.style.boxShadow = 'none';
             filterBtn.title = 'Filtrar por reputação';
-            setStorage$1('filterMinApproval', '');
-            setStorage$1('filterMinReviews',  '');
+            setStorage('filterMinApproval', '');
+            setStorage('filterMinReviews', '');
             minApprovalInput.value = '';
-            minReviewsInput.value  = '';
+            minReviewsInput.value = '';
             clearFilter();
             updateFilterStatus();
             updateProductCount();
@@ -770,12 +806,12 @@
 
             setTimeout(() => {
                 try {
-                    const products   = extractProducts();
+                    const products = extractProducts();
                     const { minA, minR } = getFilterValues();
                     const filterMeta = filterActive
                         ? { minApproval: minA, minReviews: minR }
                         : null;
-                    const query     = new URLSearchParams(window.location.search).get('q') || 'desconhecido';
+                    const query = new URLSearchParams(window.location.search).get('q') || 'desconhecido';
                     const formatted = formatForLLM(products, query, filterMeta);
 
                     if (typeof GM_setClipboard !== 'undefined') GM_setClipboard(formatted);
@@ -807,12 +843,19 @@
 
     function initItemPage() {
         const { el: container, onContainerClick } = createDragContainer();
-        const { btn, icon, btnText, sizeToggle }  = createExtractButton('Copiar Produto');
+        const { btn, icon, btnText, sizeToggle } = createExtractButton('Copiar Produto', container);
 
         const btnRow = document.createElement('div');
-        btnRow.style.cssText = 'display: flex; align-items: stretch;';
+        btnRow.style.cssText = 'display: flex; justify-content: space-between; align-items: stretch; gap: 12px;';
         btnRow.appendChild(btn);
-        btnRow.appendChild(sizeToggle);
+
+        const rightPill = document.createElement('div');
+        rightPill.style.cssText = 'display: flex; align-items: stretch; background: #09090b; border: 1px solid #27272a; border-radius: 9999px; overflow: hidden; margin: 2px;';
+        
+        sizeToggle.style.borderLeft = 'none'; // remove border as it is the only element in the pill
+        rightPill.appendChild(sizeToggle);
+        
+        btnRow.appendChild(rightPill);
         container.appendChild(btnRow);
         document.body.appendChild(container);
 

@@ -10,47 +10,51 @@ import { applyFilter, clearFilter } from '../core/filter.js';
 import { getStorage, setStorage } from '../utils/storage.js';
 
 export function initSearchPage() {
-    let filterActive    = false;
+    let filterActive = false;
     let filterPanelOpen = false;
 
     // ── Structure ──
     const { el: container, onContainerClick } = createDragContainer();
-    const { btn, icon, btnText, sizeToggle }  = createExtractButton('Extrair Produtos');
+    const { btn, icon, btnText, sizeToggle } = createExtractButton('Extrair Produtos', container);
 
     const btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display: flex; align-items: stretch;';
+    btnRow.style.cssText = 'display: flex; justify-content: space-between; align-items: stretch; gap: 12px;';
+
+    const rightPill = document.createElement('div');
+    rightPill.style.cssText = 'display: flex; align-items: stretch; background: #09090b; border: 1px solid #27272a; border-radius: 9999px; overflow: hidden; margin: 2px;';
 
     // ── Filter button ──
     const filterBtn = document.createElement('button');
     filterBtn.title = 'Filtrar por reputação';
     filterBtn.style.cssText = `
         display: flex; align-items: center; justify-content: center;
-        padding: 0 10px;
-        background: #1a1a1a;
-        border: 1px solid #333; border-right: none;
-        cursor: pointer; opacity: 0.9;
+        padding: 0 15px; height: 100%;
+        background: transparent;
+        border: none;
+        cursor: pointer; opacity: 0.8;
         transition: opacity 0.2s, background 0.2s;
     `;
     const filterIconEl = document.createElement('img');
     filterIconEl.src = ICON.filter;
-    filterIconEl.style.cssText = 'width: 14px; height: 14px; pointer-events: none;';
+    filterIconEl.style.cssText = 'width: 20px; height: 20px; pointer-events: none; filter: grayscale(1) brightness(2); transition: all 0.2s;';
     filterBtn.appendChild(filterIconEl);
-    filterBtn.addEventListener('mouseenter', () => { filterBtn.style.opacity = '1';   if (!filterActive) filterBtn.style.background = '#2a2a2a'; });
-    filterBtn.addEventListener('mouseleave', () => { filterBtn.style.opacity = '0.9'; if (!filterActive) filterBtn.style.background = '#1a1a1a'; });
-    filterBtn.addEventListener('mousedown',  e  => e.stopPropagation());
+    filterBtn.addEventListener('mouseenter', () => { filterBtn.style.opacity = '1'; });
+    filterBtn.addEventListener('mouseleave', () => { filterBtn.style.opacity = '0.8'; });
+    filterBtn.addEventListener('mousedown', e => e.stopPropagation());
 
-    const { panel: filterPanel, minApprovalInput, minReviewsInput, applyBtn, clearBtn, status: filterStatus } = createFilterPanel();
+    const { panel: filterPanel, minApprovalInput, minReviewsInput, applyBtn, clearBtn, status: filterStatus, statusDot } = createFilterPanel();
 
     // Restaura valores salvos anteriormente
     const savedApproval = getStorage('filterMinApproval', '');
-    const savedReviews  = getStorage('filterMinReviews',  '');
+    const savedReviews = getStorage('filterMinReviews', '');
     if (savedApproval !== '') minApprovalInput.value = savedApproval;
-    if (savedReviews  !== '') minReviewsInput.value  = savedReviews;
+    if (savedReviews !== '') minReviewsInput.value = savedReviews;
 
     // ── Assemble ──
+    rightPill.appendChild(filterBtn);
+    rightPill.appendChild(sizeToggle);
     btnRow.appendChild(btn);
-    btnRow.appendChild(filterBtn);
-    btnRow.appendChild(sizeToggle);
+    btnRow.appendChild(rightPill);
     container.appendChild(btnRow);
     container.appendChild(filterPanel);
     document.body.appendChild(container);
@@ -77,8 +81,8 @@ export function initSearchPage() {
         }
         const lc = getListContainer();
         if (!lc) return;
-        const cards   = lc.querySelectorAll(':scope > a');
-        let   visible = 0;
+        const cards = lc.querySelectorAll(':scope > a');
+        let visible = 0;
         cards.forEach(c => { if (c.style.display !== 'none') visible++; });
         filterStatus.textContent = `${visible} de ${cards.length} visíveis`;
     }
@@ -86,7 +90,7 @@ export function initSearchPage() {
     function getFilterValues() {
         return {
             minA: minApprovalInput.value !== '' ? parseInt(minApprovalInput.value) : null,
-            minR: minReviewsInput.value  !== '' ? parseInt(minReviewsInput.value)  : null,
+            minR: minReviewsInput.value !== '' ? parseInt(minReviewsInput.value) : null,
         };
     }
 
@@ -94,10 +98,13 @@ export function initSearchPage() {
         const { minA, minR } = getFilterValues();
         if (minA === null && minR === null) { doClearFilter(); return; }
         filterActive = true;
-        filterBtn.style.background = '#1e3a5f';
+        filterBtn.style.background = 'rgba(250, 204, 21, 0.1)';
+        filterIconEl.style.filter = 'none';
+        statusDot.style.background = '#facc15';
+        statusDot.style.boxShadow = '0 0 8px #facc15';
         filterBtn.title = 'Filtro ativo — clique para editar';
         setStorage('filterMinApproval', minApprovalInput.value);
-        setStorage('filterMinReviews',  minReviewsInput.value);
+        setStorage('filterMinReviews', minReviewsInput.value);
         applyFilter(minA, minR);
         updateFilterStatus();
         updateProductCount();
@@ -105,12 +112,15 @@ export function initSearchPage() {
 
     function doClearFilter() {
         filterActive = false;
-        filterBtn.style.background = '#1a1a1a';
+        filterBtn.style.background = 'transparent';
+        filterIconEl.style.filter = 'grayscale(1) brightness(2)';
+        statusDot.style.background = '#3f3f46';
+        statusDot.style.boxShadow = 'none';
         filterBtn.title = 'Filtrar por reputação';
         setStorage('filterMinApproval', '');
-        setStorage('filterMinReviews',  '');
+        setStorage('filterMinReviews', '');
         minApprovalInput.value = '';
-        minReviewsInput.value  = '';
+        minReviewsInput.value = '';
         clearFilter();
         updateFilterStatus();
         updateProductCount();
@@ -157,12 +167,12 @@ export function initSearchPage() {
 
         setTimeout(() => {
             try {
-                const products   = extractProducts();
+                const products = extractProducts();
                 const { minA, minR } = getFilterValues();
                 const filterMeta = filterActive
                     ? { minApproval: minA, minReviews: minR }
                     : null;
-                const query     = new URLSearchParams(window.location.search).get('q') || 'desconhecido';
+                const query = new URLSearchParams(window.location.search).get('q') || 'desconhecido';
                 const formatted = formatForLLM(products, query, filterMeta);
 
                 if (typeof GM_setClipboard !== 'undefined') GM_setClipboard(formatted);

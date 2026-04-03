@@ -13,63 +13,64 @@ import { getStorage, setStorage } from '../utils/storage.js';
  *   sizeToggle: HTMLButtonElement,
  * }}
  */
-export function createExtractButton(label) {
+export function createExtractButton(label, container) {
     let currentSizeIndex = (() => {
         const idx = SIZE_ORDER.indexOf(getStorage('btnSize', null));
-        return idx !== -1 ? idx : 1;
+        return idx !== -1 ? idx : 0;
     })();
 
     // ── Main button ──
     const btn = document.createElement('button');
     btn.style.cssText = `
-        display: flex; align-items: center; gap: 8px;
-        padding: 10px 16px;
-        background: #1a1a1a; color: #e0e0e0;
-        border: 1px solid #333; border-right: none;
-        border-radius: 6px 0 0 6px;
-        cursor: pointer; font-size: 13px; font-weight: 500;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        display: flex; align-items: center; justify-content: center;
+        background: #09090b; color: #f4f4f5;
+        border: 1px solid #27272a;
+        border-radius: 9999px;
+        cursor: pointer; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         transition: background 0.2s ease, border-color 0.2s ease;
+        padding: 10px 20px; font-size: 15px; font-weight: bold; gap: 10px; min-width: 180px;
     `;
+    const iconWrap = document.createElement('div');
+    iconWrap.style.cssText = 'display: flex; align-items: center; justify-content: center; background: white; border-radius: 50%; width: 28px; height: 28px;';
     const icon = document.createElement('img');
     icon.src = ICON.copy;
-    icon.style.cssText = 'width: 18px; height: 18px;';
+    icon.style.cssText = 'width: 16px; height: 16px;';
+    iconWrap.appendChild(icon);
+
     const btnText = document.createElement('span');
     btnText.textContent = label;
-    btn.appendChild(icon);
+    btn.appendChild(iconWrap);
     btn.appendChild(btnText);
-    btn.addEventListener('mouseenter', () => { btn.style.background = '#2a2a2a'; btn.style.borderColor = '#444'; });
-    btn.addEventListener('mouseleave', () => { btn.style.background = '#1a1a1a'; btn.style.borderColor = '#333'; });
+    btn.addEventListener('mouseenter', () => { btn.style.background = '#18181b'; btn.style.borderColor = '#3f3f46'; });
+    btn.addEventListener('mouseleave', () => { btn.style.background = '#09090b'; btn.style.borderColor = '#27272a'; });
 
     // ── Size toggle ──
     const sizeToggle = document.createElement('button');
     sizeToggle.title = 'Mudar tamanho';
     sizeToggle.style.cssText = `
         display: flex; align-items: center; justify-content: center;
-        padding: 0 10px;
-        background: #1a1a1a;
-        border: 1px solid #333;
-        border-radius: 0 6px 6px 0;
-        cursor: pointer; opacity: 0.9;
+        padding: 0 15px; height: 100%;
+        background: transparent;
+        border: none;
+        border-left: 1px solid #27272a;
+        cursor: pointer; opacity: 0.8;
         transition: opacity 0.2s, background 0.2s, transform 0.15s ease;
     `;
     const sizeIconEl = document.createElement('img');
     sizeIconEl.src = ICON.resize;
-    sizeIconEl.style.cssText = 'width: 14px; height: 14px; pointer-events: none;';
+    sizeIconEl.style.cssText = 'width: 20px; height: 20px; pointer-events: none;';
     sizeToggle.appendChild(sizeIconEl);
-    sizeToggle.addEventListener('mouseenter', () => { sizeToggle.style.opacity = '1';   sizeToggle.style.background = '#2a2a2a'; });
-    sizeToggle.addEventListener('mouseleave', () => { sizeToggle.style.opacity = '0.9'; sizeToggle.style.background = '#1a1a1a'; });
+    sizeToggle.addEventListener('mouseenter', () => { sizeToggle.style.opacity = '1'; });
+    sizeToggle.addEventListener('mouseleave', () => { sizeToggle.style.opacity = '0.8'; });
     // Prevent drag from starting when clicking the toggle
     sizeToggle.addEventListener('mousedown', e => e.stopPropagation());
 
     function applySize(key) {
         const s = SIZES[key];
-        btn.style.padding  = s.padding;
-        btn.style.fontSize = s.fontSize;
-        btn.style.gap      = s.gap;
-        btn.style.minWidth = s.minWidth;
-        icon.style.width   = s.iconSize;
-        icon.style.height  = s.iconSize;
+        if (container) {
+            container.style.transform = `scale(${s.scale})`;
+            container.style.transformOrigin = 'top right';
+        }
     }
     applySize(SIZE_ORDER[currentSizeIndex]);
 
@@ -81,14 +82,14 @@ export function createExtractButton(label) {
         currentSizeIndex = (currentSizeIndex + 1) % SIZE_ORDER.length;
         const newSize = SIZE_ORDER[currentSizeIndex];
         sizeToggle.style.transform = 'scale(0.9)';
-        btn.style.transition  = 'all 0.3s ease';
+        btn.style.transition = 'all 0.3s ease';
         icon.style.transition = 'all 0.3s ease';
         applySize(newSize);
         setStorage('btnSize', newSize);
         setTimeout(() => { sizeToggle.style.transform = 'scale(1)'; }, 150);
         setTimeout(() => {
             sizeChanging = false;
-            btn.style.transition  = 'background 0.2s ease, border-color 0.2s ease';
+            btn.style.transition = 'background 0.2s ease, border-color 0.2s ease';
             icon.style.transition = '';
         }, 400);
     });
