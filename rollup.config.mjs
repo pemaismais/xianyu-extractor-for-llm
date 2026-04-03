@@ -11,6 +11,8 @@ const banner = `\
 // @match        https://goofish.com/search*
 // @match        https://www.goofish.com/item*
 // @match        https://goofish.com/item*
+// @match        https://www.goofish.com/personal*
+// @match        https://goofish.com/personal*
 // @grant        GM_setClipboard
 // @grant        GM_notification
 // @grant        GM_setValue

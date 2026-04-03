@@ -10,6 +10,8 @@
 // @match        https://goofish.com/search*
 // @match        https://www.goofish.com/item*
 // @match        https://goofish.com/item*
+// @match        https://www.goofish.com/personal*
+// @match        https://goofish.com/personal*
 // @grant        GM_setClipboard
 // @grant        GM_notification
 // @grant        GM_setValue
@@ -23,6 +25,15 @@
     /** @type {Map<string, { reviews: number, approval: number | null }>} */
     const reputationCache = new Map();
 
+    /** @type {Map<string, object>} userId → seller profile data */
+    const sellerCache = new Map();
+
+    /** @type {Map<string, object[]>} userId → accumulated item list */
+    const sellerItemsCache = new Map();
+
+    /** @type {Map<string, number>} userId → total item count reported by API */
+    const sellerTotalCache = new Map();
+
     /**
      * Intercepts XMLHttpRequest (used by Alibaba's mtop.js library) to populate
      * reputationCache from mtop.taobao.idlemtopsearch responses.
@@ -34,10 +45,90 @@
 
         XMLHttpRequest.prototype.open = function (method, url, ...rest) {
             this._xianyuUrl = typeof url === 'string' ? url : '';
+            // Log every mtop call so we can see what's happening on the personal page
+            if (this._xianyuUrl.includes('mtop.idle')) {
+                console.log('[xianyu] XHR open:', method, this._xianyuUrl.split('?')[0]);
+            }
             return _origOpen.apply(this, [method, url, ...rest]);
         };
 
         XMLHttpRequest.prototype.send = function (...args) {
+            if (this._xianyuUrl.includes('mtop.idle.web.user.page.head')) {
+                console.log('[xianyu] intercepting user.page.head');
+                this.addEventListener('load', function () {
+                    console.log('[xianyu] user.page.head response status:', this.status);
+                    try {
+                        const json = JSON.parse(this.responseText);
+                        const d = json?.data;
+                        console.log('[xianyu] user.page.head data keys:', Object.keys(d ?? {}));
+                        console.log('[xianyu] user.page.head baseInfo keys:', Object.keys(d?.baseInfo ?? {}));
+                        const userId = d?.baseInfo?.userId ?? d?.baseInfo?.id ?? d?.userId
+                            ?? new URLSearchParams(window.location.search).get('userId');
+                        if (!userId) {
+                            console.warn('[xianyu] user.page.head: no userId found, baseInfo:', JSON.stringify(d?.baseInfo ?? {}).slice(0, 300));
+                            return;
+                        }
+                        sellerCache.set(String(userId), d);
+                        // total items count lives in module.tabs.item.number
+                        const total = d?.module?.tabs?.item?.number;
+                        if (total !== undefined) {
+                            sellerTotalCache.set(String(userId), Number(total));
+                            console.log('[xianyu] seller total from page.head:', total);
+                        }
+                        console.log('[xianyu] seller profile cached:', userId);
+                    } catch (e) {
+                        console.error('[xianyu] seller profile parse error:', e);
+                    }
+                });
+            }
+
+            if (this._xianyuUrl.includes('mtop.idle.web.xyh.item.list')) {
+                const capturedUrl = this._xianyuUrl;
+                console.log('[xianyu] intercepting xyh.item.list, url:', capturedUrl.slice(0, 200));
+                this.addEventListener('load', function () {
+                    console.log('[xianyu] xyh.item.list response status:', this.status);
+                    try {
+                        const json = JSON.parse(this.responseText);
+                        console.log('[xianyu] xyh.item.list data keys:', Object.keys(json?.data ?? {}));
+                        const cardList = json?.data?.cardList ?? [];
+                        console.log('[xianyu] xyh.item.list cardList length:', cardList.length);
+                        if (!cardList.length) {
+                            console.warn('[xianyu] xyh.item.list: empty cardList');
+                            return;
+                        }
+                        // userId is in the URL's `data` query param as URL-encoded JSON
+                        let userId = 'unknown';
+                        const dataMatch = capturedUrl.match(/[?&]data=([^&]+)/);
+                        if (dataMatch) {
+                            try {
+                                const parsed = JSON.parse(decodeURIComponent(dataMatch[1]));
+                                console.log('[xianyu] xyh.item.list data param parsed:', parsed);
+                                if (parsed?.userId) userId = String(parsed.userId);
+                            } catch (parseErr) {
+                                console.warn('[xianyu] xyh.item.list: failed to parse data param:', parseErr);
+                            }
+                        } else {
+                            console.warn('[xianyu] xyh.item.list: no data= param in URL');
+                        }
+                        if (userId === 'unknown') {
+                            // fallback: grab from current page URL
+                            const pageMatch = window.location.search.match(/[?&]userId=(\d+)/);
+                            if (pageMatch) userId = pageMatch[1];
+                            console.log('[xianyu] xyh.item.list: userId from page URL:', userId);
+                        }
+                        const existing = sellerItemsCache.get(userId) ?? [];
+                        sellerItemsCache.set(userId, existing.concat(cardList));
+                        const newTotal = Number(json.data.totalCount);
+                        if (newTotal > (sellerTotalCache.get(userId) ?? 0)) {
+                            sellerTotalCache.set(userId, newTotal);
+                        }
+                        console.log('[xianyu] seller items cached:', userId, sellerItemsCache.get(userId).length, '/', sellerTotalCache.get(userId), 'itens');
+                    } catch (e) {
+                        console.error('[xianyu] seller items parse error:', e);
+                    }
+                });
+            }
+
             if (this._xianyuUrl.includes('mtop.taobao.idlemtopsearch')) {
                 this.addEventListener('load', function () {
                     try {
@@ -567,6 +658,61 @@
         return products;
     }
 
+    /**
+     * @param {object|null} profile  — sellerCache entry (mtop.idle.web.user.page.head data)
+     * @param {object[]} items       — sellerItemsCache entries (mtop.idle.web.xyh.item.list cardList)
+     * @param {string} userId
+     */
+    function formatSellerForLLM(profile, items, userId) {
+        let out = `# Vendedor Xianyu/Goofish\n\nData: ${new Date().toLocaleString('pt-BR')}\n\n---\n\n`;
+
+        out += `## Perfil do Vendedor\n\n`;
+        if (profile) {
+            // data.baseInfo contains the seller details
+            const b = profile.baseInfo ?? profile;
+            if (b.nickName)    out += `Nome: ${b.nickName}\n`;
+            if (b.userId ?? b.id) out += `ID: ${b.userId ?? b.id}\n`;
+            if (b.sellerCredit?.level)  out += `Nível: ${b.sellerCredit.level}\n`;
+            if (b.sellerCredit?.score)  out += `Score: ${b.sellerCredit.score}\n`;
+            if (b.goodRatePercentage !== undefined) out += `Aprovação: ${b.goodRatePercentage}%\n`;
+            if (b.evaluateCnt !== undefined)        out += `Avaliações: ${b.evaluateCnt}\n`;
+            if (b.zhiFuBaoVerified)    out += `Alipay verificado: sim\n`;
+            const city = b.city ?? b.province;
+            if (city) out += `Localização: ${city}\n`;
+        } else {
+            out += `Perfil não disponível (página ainda não carregou o dado)\n`;
+        }
+        out += `Link: https://www.goofish.com/personal?userId=${userId}\n`;
+
+        out += `\n---\n\n## Produtos à Venda (${items.length})\n\n`;
+
+        if (!items.length) {
+            out += `Nenhum produto capturado (role a página para carregar os itens)\n`;
+            return out;
+        }
+
+        items.forEach((card, i) => {
+            const d = card?.cardData ?? card;
+            const itemId   = d?.detailParams?.itemId;
+            const title    = d?.title;
+            const price    = d?.priceInfo?.price;
+            const shipping = d?.detailParams?.postInfo;
+            const origPrice = d?.itemLabelDataVO?.labelData?.r3?.tagList?.[0]?.data?.content;
+            const freshness = d?.itemLabelDataVO?.labelData?.r2?.tagList?.[0]?.data?.content;
+
+            out += `### Item ${i + 1}\n\n`;
+            if (title)      out += `Título: ${title}\n`;
+            if (price)      out += `Preço: ¥${price}\n`;
+            if (origPrice)  out += `Preço original: ${origPrice}\n`;
+            if (shipping)   out += `Frete: ${shipping}\n`;
+            if (freshness)  out += `Publicação: ${freshness}\n`;
+            if (itemId)     out += `Link: https://www.goofish.com/item?id=${itemId}\n`;
+            out += '\n';
+        });
+
+        return out;
+    }
+
     /** @param {object} item */
     function formatSingleItemForLLM(item) {
         let out = `# Produto Xianyu/Goofish\n\nData: ${new Date().toLocaleString('pt-BR')}\n\n---\n\n## Informações do Produto\n\n`;
@@ -893,14 +1039,82 @@
         console.log('Xianyu/Goofish Extractor v2.0 (item)');
     }
 
+    function initPersonalPage() {
+        const userId = new URLSearchParams(window.location.search).get('userId') ?? 'unknown';
+
+        const { el: container, onContainerClick } = createDragContainer();
+        const { btn, icon, btnText, sizeToggle } = createExtractButton('Extrair 0 de ...', container);
+
+        function updateBtnText() {
+            const cached = sellerItemsCache.get(userId)?.length ?? 0;
+            const total  = sellerTotalCache.get(userId);
+            btnText.textContent = total !== undefined
+                ? `Extrair ${cached} de ${total}`
+                : `Extrair ${cached} de ...`;
+        }
+        updateBtnText();
+        setInterval(updateBtnText, 500);
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display: flex; justify-content: space-between; align-items: stretch; gap: 12px;';
+        btnRow.appendChild(btn);
+
+        const rightPill = document.createElement('div');
+        rightPill.style.cssText = 'display: flex; align-items: stretch; background: #09090b; border: 1px solid #27272a; border-radius: 9999px; overflow: hidden; margin: 2px;';
+        sizeToggle.style.borderLeft = 'none';
+        rightPill.appendChild(sizeToggle);
+        btnRow.appendChild(rightPill);
+
+        container.appendChild(btnRow);
+        document.body.appendChild(container);
+
+        function handleExtract() {
+            btnText.textContent = 'Extraindo...';
+            btn.disabled = true;
+
+            setTimeout(() => {
+                try {
+                    console.log('[xianyu] personal extract — userId:', userId);
+                    console.log('[xianyu] sellerCache keys:', [...sellerCache.keys()]);
+                    console.log('[xianyu] sellerItemsCache keys:', [...sellerItemsCache.keys()]);
+                    const profile = sellerCache.get(userId) ?? null;
+                    const items   = sellerItemsCache.get(userId) ?? [];
+                    console.log('[xianyu] profile found:', !!profile, '| items found:', items.length);
+                    const formatted = formatSellerForLLM(profile, items, userId);
+
+                    if (typeof GM_setClipboard !== 'undefined') GM_setClipboard(formatted);
+                    else navigator.clipboard.writeText(formatted);
+
+                    btnText.textContent = 'Copiado';
+                    icon.src = ICON.check;
+                    console.log('=== VENDEDOR EXTRAÍDO ===\n', formatted);
+                } catch (e) {
+                    console.error('Erro na extração:', e);
+                    btnText.textContent = 'Erro';
+                    icon.src = ICON.alert;
+                }
+                setTimeout(() => {
+                    updateBtnText();
+                    icon.src = ICON.copy;
+                    btn.disabled = false;
+                }, 2000);
+            }, 100);
+        }
+
+        onContainerClick(e => { if (btn.contains(e.target)) handleExtract(); });
+
+        console.log('Xianyu/Goofish Extractor v2.0 (personal)');
+    }
+
     // Phase 1 — runs immediately at document-start, before any page scripts.
     installInterceptor();
 
     // Phase 2 — init UI after DOM is ready.
     function boot() {
         const path = window.location.pathname;
-        if (path.includes('/search'))   initSearchPage();
-        else if (path.includes('/item')) initItemPage();
+        if (path.includes('/search'))        initSearchPage();
+        else if (path.includes('/item'))     initItemPage();
+        else if (path.includes('/personal')) initPersonalPage();
     }
 
     if (document.readyState === 'loading') {
