@@ -6,8 +6,10 @@ Userscript para extrair produtos do Xianyu (闲鱼) / Goofish em formato otimiza
 
 - Extrai produtos de páginas de busca (múltiplos itens)
 - Extrai detalhes de páginas de produto individual
-- Formata em Markdown limpo para LLMs
-- Botão flat e arrastável
+- **Filtro por reputação do vendedor** — mínimo de aprovação (%) e avaliações
+- Dados de reputação enriquecidos no output (aprovação, nº de avaliações)
+- Filtros salvos entre sessões via storage do ScriptCat/Tampermonkey
+- Botão arrastável com snap nas bordas
 - Copia automaticamente para o clipboard
 
 ## Instalação
@@ -20,49 +22,76 @@ Userscript para extrair produtos do Xianyu (闲鱼) / Goofish em formato otimiza
 
 ### Página de busca
 
-Acesse uma busca como `goofish.com/search?q=x99` e clique no botão "Extrair X Produtos".
+Acesse uma busca como `goofish.com/search?q=x99` e clique em **"Extrair X Produtos"**.
+
+#### Filtro por reputação
+
+Clique no ícone de funil para abrir o painel de filtro:
+
+- **Aprovação mínima** — oculta vendedores abaixo do % definido (ex: `95`)
+- **Avaliações mínimas** — oculta vendedores com poucas avaliações (ex: `50`)
+
+Os valores são salvos automaticamente e reaplicados na próxima visita. O botão fica azul quando há um filtro ativo. A extração inclui apenas os produtos visíveis.
 
 ### Página de produto
 
-Acesse qualquer página de item e clique em "Copiar Produto".
+Acesse qualquer página de item e clique em **"Copiar Produto"**.
 
 ## Dados extraídos
 
 ### Busca
 
-- Título, preço, tags, promoções
-- Nome e reputação do vendedor
-- Link do produto
+| Campo | Descrição |
+|---|---|
+| Título | Título do anúncio |
+| Preço | Preço atual |
+| Tags | Tags do produto |
+| Promoção | Desconto ou promoção ativa |
+| Vendedor | Nome do vendedor |
+| Nível | Tag de reputação exibida no card |
+| Aprovação | % de avaliações positivas (via API) |
+| Avaliações | Número total de avaliações (via API) |
+| Link | URL do produto |
 
 ### Produto individual
 
 - Descrição completa
-- Preço e atributos (marca, condição, etc)
+- Preço e atributos (marca, condição, etc.)
 - Engajamento (interessados, visualizações)
-- Informações do vendedor (local, tempo na plataforma, vendas, avaliação)
+- Informações do vendedor
 
-## Exemplo de output
+## Exemplo de output (busca com filtro)
 
 ```
-# Produto Xianyu/Goofish
+# Resultados Xianyu/Goofish
 
-Data: 31/03/2026, 15:00:00
+Busca: x99 (filtro: aprovação ≥ 95% / avaliações ≥ 50)
+Total: 12 produtos
+Data: 03/04/2026, 14:32:00
 
 ---
 
-## Informações do Produto
+## Produto 1
 
-Descrição: X99主板 DDR4 | 已测试 | 退货邮费自理
+Título: X99主板 DDR4 LGA2011-3 支持E5-2678 V3
 Preço: ¥158
-Atributos: 品牌: Intel/英特尔, 成色: 轻微使用痕迹
-Engajamento: 167人想要 4610浏览
+Tags: 轻微使用痕迹
+Vendedor: loja_tech
+Nível: 卖家信用极好
+Aprovação: 98%
+Avaliações: 1066
 Link: https://www.goofish.com/item?id=...
-
-## Informações do Vendedor
-
-Nome: loja_tech
-Info: 佛山, 来闲鱼1年, 卖出714件宝贝, 好评率98%
 ```
+
+## Desenvolvimento
+
+```bash
+npm install
+npm run build   # gera xianyu-extractor.user.js
+npm run dev     # watch mode
+```
+
+Estrutura em `src/` com módulos ES, bundled pelo Rollup para um único arquivo IIFE.
 
 ## Licença
 
