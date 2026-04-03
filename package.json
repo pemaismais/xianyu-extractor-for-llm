@@ -1,0 +1,12 @@
+{
+  "name": "xianyu-extractor-for-llm",
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c --watch"
+  },
+  "devDependencies": {
+    "rollup": "^4.0.0"
+  }
+}
