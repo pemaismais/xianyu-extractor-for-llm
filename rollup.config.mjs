@@ -16,7 +16,8 @@ const banner = `\
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @run-at       document-start
-// ==/UserScript==`;
+// ==/UserScript==
+`;
 
 /** @type {import('rollup').RollupOptions} */
 export default {

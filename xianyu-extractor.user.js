@@ -16,6 +16,7 @@
 // @grant        GM_getValue
 // @run-at       document-start
 // ==/UserScript==
+
 (function () {
     'use strict';
 
