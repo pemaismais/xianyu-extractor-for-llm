@@ -1,13 +1,15 @@
 # Xianyu/Goofish Extractor for LLM
 
-Userscript para extrair produtos do Xianyu (闲鱼) / Goofish em formato otimizado para análise com LLMs.
+Userscript para extrair produtos e perfis de vendedores do Xianyu (闲鱼) / Goofish em formato otimizado para análise com LLMs.
 
 ## Funcionalidades
 
 - Extrai produtos de páginas de busca (múltiplos itens)
-- Extrai detalhes de páginas de produto individual
-- **Filtro por reputação do vendedor** — mínimo de aprovação (%) e avaliações
-- Dados de reputação enriquecidos no output (aprovação, nº de avaliações)
+- Extrai detalhes de páginas de produto individual, incluindo perfil do vendedor
+- Extrai perfil completo do vendedor + produtos à venda na página pessoal
+- Extrai avaliações recebidas pelo vendedor
+- **Filtro por reputação** — mínimo de aprovação (%) e avaliações na busca
+- Dados de reputação enriquecidos via interceptação de XHR (aprovação, nº de avaliações)
 - Filtros salvos entre sessões via storage do ScriptCat/Tampermonkey
 - Botão arrastável com snap nas bordas
 - Copia automaticamente para o clipboard
@@ -20,7 +22,7 @@ Userscript para extrair produtos do Xianyu (闲鱼) / Goofish em formato otimiza
 
 ## Uso
 
-### Página de busca
+### Página de busca (`/search`)
 
 Acesse uma busca como `goofish.com/search?q=x99` e clique em **"Extrair X Produtos"**.
 
@@ -31,11 +33,18 @@ Clique no ícone de funil para abrir o painel de filtro:
 - **Aprovação mínima** — oculta vendedores abaixo do % definido (ex: `95`)
 - **Avaliações mínimas** — oculta vendedores com poucas avaliações (ex: `50`)
 
-Os valores são salvos automaticamente e reaplicados na próxima visita. O botão fica azul quando há um filtro ativo. A extração inclui apenas os produtos visíveis.
+Os valores são salvos automaticamente e reaplicados na próxima visita. O filtro é reaplicado automaticamente ao rolar (infinite scroll). A extração inclui apenas os produtos visíveis.
 
-### Página de produto
+### Página de produto (`/item`)
 
-Acesse qualquer página de item e clique em **"Copiar Produto"**.
+Acesse qualquer página de item e clique em **"Copiar Produto"**. O output inclui descrição, preço, atributos e informações estruturadas do vendedor (aprovação, itens vendidos, dias na plataforma, localização, link do perfil).
+
+### Página do vendedor (`/personal`)
+
+Acesse `goofish.com/personal?userId=...` — dois botões aparecem:
+
+- **"Extrair X de Y"** — copia o perfil completo do vendedor + todos os produtos à venda capturados até o momento. Role a página para acumular mais itens antes de copiar.
+- **"Extrair X de Y reviews"** — copia as avaliações recebidas. Abra a aba de avaliações para carregar; ir e voltar não duplica (deduplicação por ID).
 
 ## Dados extraídos
 
@@ -49,16 +58,21 @@ Acesse qualquer página de item e clique em **"Copiar Produto"**.
 | Promoção | Desconto ou promoção ativa |
 | Vendedor | Nome do vendedor |
 | Nível | Tag de reputação exibida no card |
-| Aprovação | % de avaliações positivas (via API) |
-| Avaliações | Número total de avaliações (via API) |
+| Aprovação | % de avaliações positivas (via XHR) |
+| Avaliações | Número total de avaliações (via XHR) |
 | Link | URL do produto |
 
 ### Produto individual
 
-- Descrição completa
-- Preço e atributos (marca, condição, etc.)
-- Engajamento (interessados, visualizações)
-- Informações do vendedor
+- Descrição completa, preço e atributos (marca, condição, etc.)
+- Engajamento (visualizações, interessados)
+- Vendedor: nome, ID, aprovação, itens vendidos, dias na plataforma, localização, link do perfil
+
+### Página pessoal do vendedor
+
+- Perfil: nome, ID, nível da loja, score, aprovação, avaliações, localização
+- Produtos: título, preço, preço original, frete, data de publicação, link
+- Avaliações: avaliador, data, localização, tipo (positiva/neutra/negativa), comentário, tags
 
 ## Exemplo de output (busca com filtro)
 
@@ -77,7 +91,6 @@ Título: X99主板 DDR4 LGA2011-3 支持E5-2678 V3
 Preço: ¥158
 Tags: 轻微使用痕迹
 Vendedor: loja_tech
-Nível: 卖家信用极好
 Aprovação: 98%
 Avaliações: 1066
 Link: https://www.goofish.com/item?id=...
