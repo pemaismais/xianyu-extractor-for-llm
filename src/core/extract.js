@@ -1,4 +1,4 @@
-import { reputationCache } from '../cache.js';
+import { reputationCache, lastSellerUserId } from '../cache.js';
 import { safeText, safeTextAll, getItemIdFromCard, getListContainer } from '../utils/dom.js';
 import { SELECTORS } from '../config.js';
 
@@ -10,8 +10,30 @@ export function extractSingleItem() {
 
     const sellerInfoEl = document.querySelector(SELECTORS.sellerInfo);
     if (sellerInfoEl) {
-        const infos = safeTextAll(sellerInfoEl.querySelectorAll(SELECTORS.sellerLabel));
-        if (infos.length) item.vendedor_info = infos.join(', ');
+        const labels = safeTextAll(sellerInfoEl.querySelectorAll(SELECTORS.sellerLabel));
+        for (const text of labels) {
+            if (!item.vendedor_location) {
+                const loc = text.match(/^[\u4e00-\u9fa5]{2,}/);
+                if (loc && !text.includes('天') && !text.includes('件') && !text.includes('%'))
+                    item.vendedor_location = loc[0];
+            }
+            const dias = text.match(/来闲鱼(\d+)天/);
+            if (dias) item.vendedor_dias = parseInt(dias[1]);
+            const vendidos = text.match(/卖出(\d+)件/);
+            if (vendidos) item.vendedor_vendidos = parseInt(vendidos[1]);
+            const aprovacao = text.match(/好评率(\d+)%/);
+            if (aprovacao) item.vendedor_aprovacao = parseInt(aprovacao[1]);
+        }
+    }
+
+    // Find seller userId: try DOM link first, fall back to last intercepted
+    const sellerLink = document.querySelector('a[href*="personal?"]') ?? document.querySelector('a[href*="userId="]');
+    if (sellerLink) {
+        const m = sellerLink.href.match(/[?&]userId=(\d+)/);
+        if (m) item.vendedor_id = m[1];
+    }
+    if (!item.vendedor_id && lastSellerUserId) {
+        item.vendedor_id = lastSellerUserId;
     }
 
     item.preco = safeText(document.querySelector(SELECTORS.price));

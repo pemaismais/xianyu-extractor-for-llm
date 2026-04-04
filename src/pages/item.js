@@ -1,4 +1,5 @@
 import { ICON } from '../config.js';
+import { sellerCache } from '../cache.js';
 import { createDragContainer } from '../ui/container.js';
 import { createExtractButton } from '../ui/base-button.js';
 import { extractSingleItem } from '../core/extract.js';
@@ -29,7 +30,8 @@ export function initItemPage() {
         setTimeout(() => {
             try {
                 const item      = extractSingleItem();
-                const formatted = formatSingleItemForLLM(item);
+                const profile   = item.vendedor_id ? (sellerCache.get(item.vendedor_id) ?? null) : null;
+                const formatted = formatSingleItemForLLM(item, profile);
 
                 if (typeof GM_setClipboard !== 'undefined') GM_setClipboard(formatted);
                 else navigator.clipboard.writeText(formatted);

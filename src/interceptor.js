@@ -1,4 +1,4 @@
-import { reputationCache, sellerCache, sellerItemsCache, sellerTotalCache } from './cache.js';
+import { reputationCache, sellerCache, sellerItemsCache, sellerTotalCache, sellerReviewsCache, sellerReviewsTotalCache, setLastSellerUserId } from './cache.js';
 
 /**
  * Intercepts XMLHttpRequest (used by Alibaba's mtop.js library) to populate
@@ -35,6 +35,7 @@ export function installInterceptor() {
                         return;
                     }
                     sellerCache.set(String(userId), d);
+                    setLastSellerUserId(String(userId));
                     // total items count lives in module.tabs.item.number
                     const total = d?.module?.tabs?.item?.number;
                     if (total !== undefined) {
@@ -82,15 +83,57 @@ export function installInterceptor() {
                         if (pageMatch) userId = pageMatch[1];
                         console.log('[xianyu] xyh.item.list: userId from page URL:', userId);
                     }
-                    const existing = sellerItemsCache.get(userId) ?? [];
-                    sellerItemsCache.set(userId, existing.concat(cardList));
+                    const existingItems = sellerItemsCache.get(userId) ?? new Map();
+                    for (const card of cardList) {
+                        const id = card?.cardData?.detailParams?.itemId;
+                        if (id !== undefined) existingItems.set(id, card);
+                    }
+                    sellerItemsCache.set(userId, existingItems);
                     const newTotal = Number(json.data.totalCount);
                     if (newTotal > (sellerTotalCache.get(userId) ?? 0)) {
                         sellerTotalCache.set(userId, newTotal);
                     }
-                    console.log('[xianyu] seller items cached:', userId, sellerItemsCache.get(userId).length, '/', sellerTotalCache.get(userId), 'itens');
+                    console.log('[xianyu] seller items cached:', userId, existingItems.size, '/', sellerTotalCache.get(userId), 'itens');
                 } catch (e) {
                     console.error('[xianyu] seller items parse error:', e);
+                }
+            });
+        }
+
+        if (this._xianyuUrl.includes('mtop.idle.web.trade.rate.list')) {
+            // ratedUid lives in the POST body: data=URL-encoded-JSON
+            let reviewUserId = 'unknown';
+            const body = args[0] ?? '';
+            const bodyMatch = typeof body === 'string' ? body.match(/(?:^|&)data=([^&]+)/) : null;
+            if (bodyMatch) {
+                try {
+                    const parsed = JSON.parse(decodeURIComponent(bodyMatch[1]));
+                    if (parsed?.ratedUid) reviewUserId = String(parsed.ratedUid);
+                } catch (_) {}
+            }
+            if (reviewUserId === 'unknown') {
+                const pageMatch = window.location.search.match(/[?&]userId=(\d+)/);
+                if (pageMatch) reviewUserId = pageMatch[1];
+            }
+            const capturedReviewUserId = reviewUserId;
+            this.addEventListener('load', function () {
+                try {
+                    const json = JSON.parse(this.responseText);
+                    const cardList = json?.data?.cardList ?? [];
+                    if (!cardList.length) return;
+                    const existingMap = sellerReviewsCache.get(capturedReviewUserId) ?? new Map();
+                    for (const card of cardList) {
+                        const id = card?.cardData?.rateId;
+                        if (id !== undefined) existingMap.set(id, card);
+                    }
+                    sellerReviewsCache.set(capturedReviewUserId, existingMap);
+                    const total = Number(json?.data?.totalCount ?? 0);
+                    if (total > (sellerReviewsTotalCache.get(capturedReviewUserId) ?? 0)) {
+                        sellerReviewsTotalCache.set(capturedReviewUserId, total);
+                    }
+                    console.log('[xianyu] reviews cached:', capturedReviewUserId, sellerReviewsCache.get(capturedReviewUserId).size, '/', sellerReviewsTotalCache.get(capturedReviewUserId));
+                } catch (e) {
+                    console.error('[xianyu] reviews parse error:', e);
                 }
             });
         }

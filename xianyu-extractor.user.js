@@ -28,11 +28,21 @@
     /** @type {Map<string, object>} userId → seller profile data */
     const sellerCache = new Map();
 
+    /** Most recently intercepted seller userId (set by user.page.head XHR) */
+    let lastSellerUserId = null;
+    function setLastSellerUserId(id) { lastSellerUserId = id; }
+
     /** @type {Map<string, object[]>} userId → accumulated item list */
     const sellerItemsCache = new Map();
 
     /** @type {Map<string, number>} userId → total item count reported by API */
     const sellerTotalCache = new Map();
+
+    /** @type {Map<string, object[]>} userId → accumulated reviews list */
+    const sellerReviewsCache = new Map();
+
+    /** @type {Map<string, number>} userId → total review count reported by API */
+    const sellerReviewsTotalCache = new Map();
 
     /**
      * Intercepts XMLHttpRequest (used by Alibaba's mtop.js library) to populate
@@ -69,6 +79,7 @@
                             return;
                         }
                         sellerCache.set(String(userId), d);
+                        setLastSellerUserId(String(userId));
                         // total items count lives in module.tabs.item.number
                         const total = d?.module?.tabs?.item?.number;
                         if (total !== undefined) {
@@ -116,15 +127,57 @@
                             if (pageMatch) userId = pageMatch[1];
                             console.log('[xianyu] xyh.item.list: userId from page URL:', userId);
                         }
-                        const existing = sellerItemsCache.get(userId) ?? [];
-                        sellerItemsCache.set(userId, existing.concat(cardList));
+                        const existingItems = sellerItemsCache.get(userId) ?? new Map();
+                        for (const card of cardList) {
+                            const id = card?.cardData?.detailParams?.itemId;
+                            if (id !== undefined) existingItems.set(id, card);
+                        }
+                        sellerItemsCache.set(userId, existingItems);
                         const newTotal = Number(json.data.totalCount);
                         if (newTotal > (sellerTotalCache.get(userId) ?? 0)) {
                             sellerTotalCache.set(userId, newTotal);
                         }
-                        console.log('[xianyu] seller items cached:', userId, sellerItemsCache.get(userId).length, '/', sellerTotalCache.get(userId), 'itens');
+                        console.log('[xianyu] seller items cached:', userId, existingItems.size, '/', sellerTotalCache.get(userId), 'itens');
                     } catch (e) {
                         console.error('[xianyu] seller items parse error:', e);
+                    }
+                });
+            }
+
+            if (this._xianyuUrl.includes('mtop.idle.web.trade.rate.list')) {
+                // ratedUid lives in the POST body: data=URL-encoded-JSON
+                let reviewUserId = 'unknown';
+                const body = args[0] ?? '';
+                const bodyMatch = typeof body === 'string' ? body.match(/(?:^|&)data=([^&]+)/) : null;
+                if (bodyMatch) {
+                    try {
+                        const parsed = JSON.parse(decodeURIComponent(bodyMatch[1]));
+                        if (parsed?.ratedUid) reviewUserId = String(parsed.ratedUid);
+                    } catch (_) {}
+                }
+                if (reviewUserId === 'unknown') {
+                    const pageMatch = window.location.search.match(/[?&]userId=(\d+)/);
+                    if (pageMatch) reviewUserId = pageMatch[1];
+                }
+                const capturedReviewUserId = reviewUserId;
+                this.addEventListener('load', function () {
+                    try {
+                        const json = JSON.parse(this.responseText);
+                        const cardList = json?.data?.cardList ?? [];
+                        if (!cardList.length) return;
+                        const existingMap = sellerReviewsCache.get(capturedReviewUserId) ?? new Map();
+                        for (const card of cardList) {
+                            const id = card?.cardData?.rateId;
+                            if (id !== undefined) existingMap.set(id, card);
+                        }
+                        sellerReviewsCache.set(capturedReviewUserId, existingMap);
+                        const total = Number(json?.data?.totalCount ?? 0);
+                        if (total > (sellerReviewsTotalCache.get(capturedReviewUserId) ?? 0)) {
+                            sellerReviewsTotalCache.set(capturedReviewUserId, total);
+                        }
+                        console.log('[xianyu] reviews cached:', capturedReviewUserId, sellerReviewsCache.get(capturedReviewUserId).size, '/', sellerReviewsTotalCache.get(capturedReviewUserId));
+                    } catch (e) {
+                        console.error('[xianyu] reviews parse error:', e);
                     }
                 });
             }
@@ -567,8 +620,30 @@
 
         const sellerInfoEl = document.querySelector(SELECTORS.sellerInfo);
         if (sellerInfoEl) {
-            const infos = safeTextAll(sellerInfoEl.querySelectorAll(SELECTORS.sellerLabel));
-            if (infos.length) item.vendedor_info = infos.join(', ');
+            const labels = safeTextAll(sellerInfoEl.querySelectorAll(SELECTORS.sellerLabel));
+            for (const text of labels) {
+                if (!item.vendedor_location) {
+                    const loc = text.match(/^[\u4e00-\u9fa5]{2,}/);
+                    if (loc && !text.includes('天') && !text.includes('件') && !text.includes('%'))
+                        item.vendedor_location = loc[0];
+                }
+                const dias = text.match(/来闲鱼(\d+)天/);
+                if (dias) item.vendedor_dias = parseInt(dias[1]);
+                const vendidos = text.match(/卖出(\d+)件/);
+                if (vendidos) item.vendedor_vendidos = parseInt(vendidos[1]);
+                const aprovacao = text.match(/好评率(\d+)%/);
+                if (aprovacao) item.vendedor_aprovacao = parseInt(aprovacao[1]);
+            }
+        }
+
+        // Find seller userId: try DOM link first, fall back to last intercepted
+        const sellerLink = document.querySelector('a[href*="personal?"]') ?? document.querySelector('a[href*="userId="]');
+        if (sellerLink) {
+            const m = sellerLink.href.match(/[?&]userId=(\d+)/);
+            if (m) item.vendedor_id = m[1];
+        }
+        if (!item.vendedor_id && lastSellerUserId) {
+            item.vendedor_id = lastSellerUserId;
         }
 
         item.preco = safeText(document.querySelector(SELECTORS.price));
@@ -658,6 +733,34 @@
         return products;
     }
 
+    /** @param {object|null} profile @param {string} userId */
+    function formatProfileSection(profile, userId) {
+        let out = '';
+        if (profile) {
+            const b    = profile.baseInfo ?? profile;
+            const base = profile.module?.base ?? {};
+            const shop = profile.module?.shop ?? {};
+
+            const displayName = base.displayName ?? b.nickName;
+            if (displayName)                       out += `Nome: ${displayName}\n`;
+            if (b.userId ?? b.id)                  out += `ID: ${b.userId ?? b.id}\n`;
+            if (b.zhiFuBaoVerified)                out += `Alipay verificado: sim\n`;
+            const city = b.city ?? b.province;
+            if (city)                              out += `Localização: ${city}\n`;
+
+            // Shop / reputation
+            if (shop.level)                        out += `Nível da loja: ${shop.level}\n`;
+            if (shop.score !== undefined)          out += `Score: ${shop.score}\n`;
+            if (shop.nextLevelNeedScore !== undefined) out += `Faltam para próximo nível: ${shop.nextLevelNeedScore} pts\n`;
+            if (shop.praiseRatio !== undefined)    out += `Aprovação: ${shop.praiseRatio}%\n`;
+            if (shop.reviewNum !== undefined)      out += `Avaliações: ${shop.reviewNum}\n`;
+        } else {
+            out += `Perfil não disponível\n`;
+        }
+        out += `Link: https://www.goofish.com/personal?userId=${userId}\n`;
+        return out;
+    }
+
     /**
      * @param {object|null} profile  — sellerCache entry (mtop.idle.web.user.page.head data)
      * @param {object[]} items       — sellerItemsCache entries (mtop.idle.web.xyh.item.list cardList)
@@ -667,22 +770,7 @@
         let out = `# Vendedor Xianyu/Goofish\n\nData: ${new Date().toLocaleString('pt-BR')}\n\n---\n\n`;
 
         out += `## Perfil do Vendedor\n\n`;
-        if (profile) {
-            // data.baseInfo contains the seller details
-            const b = profile.baseInfo ?? profile;
-            if (b.nickName)    out += `Nome: ${b.nickName}\n`;
-            if (b.userId ?? b.id) out += `ID: ${b.userId ?? b.id}\n`;
-            if (b.sellerCredit?.level)  out += `Nível: ${b.sellerCredit.level}\n`;
-            if (b.sellerCredit?.score)  out += `Score: ${b.sellerCredit.score}\n`;
-            if (b.goodRatePercentage !== undefined) out += `Aprovação: ${b.goodRatePercentage}%\n`;
-            if (b.evaluateCnt !== undefined)        out += `Avaliações: ${b.evaluateCnt}\n`;
-            if (b.zhiFuBaoVerified)    out += `Alipay verificado: sim\n`;
-            const city = b.city ?? b.province;
-            if (city) out += `Localização: ${city}\n`;
-        } else {
-            out += `Perfil não disponível (página ainda não carregou o dado)\n`;
-        }
-        out += `Link: https://www.goofish.com/personal?userId=${userId}\n`;
+        out += formatProfileSection(profile, userId);
 
         out += `\n---\n\n## Produtos à Venda (${items.length})\n\n`;
 
@@ -713,8 +801,42 @@
         return out;
     }
 
+    /**
+     * @param {object[]} reviews — sellerReviewsCache entries (cardList values)
+     * @param {object|null} profile
+     * @param {string} userId
+     */
+    function formatSellerReviewsForLLM(reviews, profile, userId) {
+        let out = `# Avaliações do Vendedor\n\nData: ${new Date().toLocaleString('pt-BR')}\n\n---\n\n`;
+        out += `## Perfil do Vendedor\n\n`;
+        out += formatProfileSection(profile, userId);
+        out += `\n---\n\n## Avaliações (${reviews.length})\n\n`;
+
+        if (!reviews.length) {
+            out += `Nenhuma avaliação capturada (abra a aba de avaliações para carregar)\n`;
+            return out;
+        }
+
+
+        reviews.forEach((card, i) => {
+            const d = card?.cardData ?? card;
+            out += `### Avaliação ${i + 1}\n\n`;
+            if (d.raterUserNick)  out += `Avaliador: ${d.raterUserNick}\n`;
+            if (d.gmtCreateStr)   out += `Data: ${d.gmtCreateStr}\n`;
+            if (d.ipAddress)      out += `Local: ${d.ipAddress}\n`;
+            const sentiment = d.rate === 1 ? 'Positiva' : d.rate === 0 ? 'Neutra' : 'Negativa';
+            out += `Tipo: ${sentiment}\n`;
+            if (d.feedback)       out += `Comentário: ${d.feedback}\n`;
+            const tags = (d.idleCustomWordContents ?? []).map(t => t.content).filter(Boolean);
+            if (tags.length)      out += `Tags: ${tags.join(', ')}\n`;
+            out += '\n';
+        });
+
+        return out;
+    }
+
     /** @param {object} item */
-    function formatSingleItemForLLM(item) {
+    function formatSingleItemForLLM(item, profile = null) {
         let out = `# Produto Xianyu/Goofish\n\nData: ${new Date().toLocaleString('pt-BR')}\n\n---\n\n## Informações do Produto\n\n`;
         if (item.descricao)         out += `Descrição: ${item.descricao}\n`;
         if (item.preco)             out += `Preço: ${item.preco}\n`;
@@ -722,8 +844,17 @@
         if (item.engajamento)       out += `Engajamento: ${item.engajamento}\n`;
         if (item.url)               out += `Link: ${item.url}\n`;
         out += `\n## Informações do Vendedor\n\n`;
-        if (item.vendedor_nome) out += `Nome: ${item.vendedor_nome}\n`;
-        if (item.vendedor_info) out += `Info: ${item.vendedor_info}\n`;
+        if (profile) {
+            out += formatProfileSection(profile, item.vendedor_id);
+        } else {
+            if (item.vendedor_nome)                    out += `Nome: ${item.vendedor_nome}\n`;
+            if (item.vendedor_id)                      out += `ID: ${item.vendedor_id}\n`;
+            if (item.vendedor_aprovacao !== undefined)  out += `Aprovação: ${item.vendedor_aprovacao}%\n`;
+            if (item.vendedor_vendidos !== undefined)   out += `Itens vendidos: ${item.vendedor_vendidos}\n`;
+            if (item.vendedor_dias !== undefined)       out += `Dias na plataforma: ${item.vendedor_dias}\n`;
+            if (item.vendedor_location)                out += `Localização: ${item.vendedor_location}\n`;
+            if (item.vendedor_id) out += `Link: https://www.goofish.com/personal?userId=${item.vendedor_id}\n`;
+        }
         return out;
     }
 
@@ -1013,7 +1144,8 @@
             setTimeout(() => {
                 try {
                     const item      = extractSingleItem();
-                    const formatted = formatSingleItemForLLM(item);
+                    const profile   = item.vendedor_id ? (sellerCache.get(item.vendedor_id) ?? null) : null;
+                    const formatted = formatSingleItemForLLM(item, profile);
 
                     if (typeof GM_setClipboard !== 'undefined') GM_setClipboard(formatted);
                     else navigator.clipboard.writeText(formatted);
@@ -1046,7 +1178,7 @@
         const { btn, icon, btnText, sizeToggle } = createExtractButton('Extrair 0 de ...', container);
 
         function updateBtnText() {
-            const cached = sellerItemsCache.get(userId)?.length ?? 0;
+            const cached = sellerItemsCache.get(userId)?.size ?? 0;
             const total  = sellerTotalCache.get(userId);
             btnText.textContent = total !== undefined
                 ? `Extrair ${cached} de ${total}`
@@ -1065,8 +1197,51 @@
         rightPill.appendChild(sizeToggle);
         btnRow.appendChild(rightPill);
 
+        // ── Reviews button ──
+        const { btn: reviewBtn, icon: reviewIcon, btnText: reviewBtnText } = createExtractButton('Extrair 0 de ... reviews', container);
+        reviewBtn.style.flex = '1';
+
+        function updateReviewBtnText() {
+            const cached = sellerReviewsCache.get(userId)?.size ?? 0;
+            const total  = sellerReviewsTotalCache.get(userId);
+            reviewBtnText.textContent = total !== undefined
+                ? `Extrair ${cached} de ${total} reviews`
+                : `Extrair ${cached} de ... reviews`;
+        }
+        updateReviewBtnText();
+        setInterval(updateReviewBtnText, 500);
+
         container.appendChild(btnRow);
+        container.appendChild(reviewBtn);
         document.body.appendChild(container);
+
+        function handleExtractReviews() {
+            reviewBtnText.textContent = 'Extraindo...';
+            reviewBtn.disabled = true;
+
+            setTimeout(() => {
+                try {
+                    const profile  = sellerCache.get(userId) ?? null;
+                    const reviewsMap = sellerReviewsCache.get(userId) ?? new Map();
+                    const formatted = formatSellerReviewsForLLM([...reviewsMap.values()], profile, userId);
+
+                    if (typeof GM_setClipboard !== 'undefined') GM_setClipboard(formatted);
+                    else navigator.clipboard.writeText(formatted);
+
+                    reviewBtnText.textContent = 'Copiado';
+                    reviewIcon.src = ICON.check;
+                } catch (e) {
+                    console.error('Erro ao extrair reviews:', e);
+                    reviewBtnText.textContent = 'Erro';
+                    reviewIcon.src = ICON.alert;
+                }
+                setTimeout(() => {
+                    updateReviewBtnText();
+                    reviewIcon.src = ICON.copy;
+                    reviewBtn.disabled = false;
+                }, 2000);
+            }, 100);
+        }
 
         function handleExtract() {
             btnText.textContent = 'Extraindo...';
@@ -1077,10 +1252,10 @@
                     console.log('[xianyu] personal extract — userId:', userId);
                     console.log('[xianyu] sellerCache keys:', [...sellerCache.keys()]);
                     console.log('[xianyu] sellerItemsCache keys:', [...sellerItemsCache.keys()]);
-                    const profile = sellerCache.get(userId) ?? null;
-                    const items   = sellerItemsCache.get(userId) ?? [];
-                    console.log('[xianyu] profile found:', !!profile, '| items found:', items.length);
-                    const formatted = formatSellerForLLM(profile, items, userId);
+                    const profile   = sellerCache.get(userId) ?? null;
+                    const itemsMap  = sellerItemsCache.get(userId) ?? new Map();
+                    console.log('[xianyu] profile found:', !!profile, '| items found:', itemsMap.size);
+                    const formatted = formatSellerForLLM(profile, [...itemsMap.values()], userId);
 
                     if (typeof GM_setClipboard !== 'undefined') GM_setClipboard(formatted);
                     else navigator.clipboard.writeText(formatted);
@@ -1101,7 +1276,10 @@
             }, 100);
         }
 
-        onContainerClick(e => { if (btn.contains(e.target)) handleExtract(); });
+        onContainerClick(e => {
+            if (btn.contains(e.target))       handleExtract();
+            if (reviewBtn.contains(e.target)) handleExtractReviews();
+        });
 
         console.log('Xianyu/Goofish Extractor v2.0 (personal)');
     }
